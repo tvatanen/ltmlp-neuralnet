@@ -1,7 +1,5 @@
 function [net res] = ltmlp_train(net, input, output, test_input, test_output)
 
-
-ADAPT_COEFF = 0.5;
 nlayers = numel(net.layers);
 layers = net.layers;
 nonlintypes = net.layertypes;
@@ -12,8 +10,6 @@ opt = net.options;
 % bias = net.bias;
 
 W_init = net.W;
-W_slow = net.W;
-bias_slow = net.bias;
 
 gradW = cell(nlayers,nlayers-1);
 gradbias = cell(nlayers,1);
@@ -50,9 +46,6 @@ if nargout > 1 || opt.verbose
   res.gradW = ones(1,opt.n_error_evals)*Inf;
   res.cputimes = ones(1,opt.n_error_evals)*Inf;
   num_evals_complete = 0;
-  % experimental:
-  res.test_errors_slow = ones(1,opt.n_error_evals)*Inf;
-  res.training_errors_slow = ones(1,opt.n_error_evals)*Inf;
 else
   save_data = 0;
 end
@@ -166,25 +159,6 @@ while cputime - cpustart < opt.runtime
 %     end
 %   end
 
-  % adapt stepsize
-  %if prop_time_used > 0.01 && mod(iter,10)==0 
-%   if iter > 49 && mod(iter,10)==0 
-%     grad_vector = ltmlp_params2vector(gradW, net.num_params);
-%     keyboard
-%     %grad_vector = w2vec(grad);
-%     %vec_direction = w2vec(direction);
-%     direction_vector = ltmlp_params2vector(directionW, net.num_params);
-%     %cos_angle = (grad_vector'*direction_vector) / sqrt(1e-9+sum(grad_vector.^2)*sum(direction_vector.^2));
-%     cos_angle = dot(grad_vector,direction_vector)/(norm(grad_vector)*norm(direction_vector));
-%     if 1 % abs(cos_angle-pi/2) > 0.15
-%       stepsize = stepsize * exp(ADAPT_COEFF*cos_angle);
-%       if opt.verbose
-%         fprintf('Stepsize adjusted. New stepsize is %.3f\n', stepsize);
-%       end
-%     end
-%   end
-
-
   % Update momentum
   if opt.momentum > 0
     for l=2:nlayers
@@ -215,19 +189,7 @@ while cputime - cpustart < opt.runtime
     end
   end
   
-  %slow_term = (blen/dlen);
-  slow_term = 1/100;
-  % update slow parameters W and bias
-  for i = 1:numel(W_slow)
-    W_slow{i} = slow_term*net.W{i}+(1-slow_term)*W_slow{i};
-  end
-  for i = 1:numel(bias_slow)
-    bias_slow{i} = slow_term*net.bias{i}+(1-slow_term)*bias_slow{i};
-  end
-
   prop_time_used = (cputime-cpustart)/opt.runtime;
-
-
   
   % Decrease stepsize in the beginning of autoencoder training
   if strcmp(opt.task, 'autoencoder') && prop_time_used <0.01
@@ -248,48 +210,37 @@ while cputime - cpustart < opt.runtime
     
     % Training error
     current_training_output = ltmlp_ff(net, input);
-    current_training_output_slow = ltmlp_ff_slow(net, input, W_slow, bias_slow);
     
     if strcmp(opt.task,'regression') || strcmp(opt.task,'autoencoder')
       res.training_errors(num_evals_complete) = mean(sum((current_training_output-output).^2,1),2);
-      res.training_errors_slow(num_evals_complete) = mean(sum((current_training_output_slow-output).^2,1),2);
     elseif strcmp(opt.task,'classification')
       [~,maxI1] = max(current_training_output);
       [~,maxI2] = max(output);
       res.training_errors(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
-      [~,maxI1] = max(current_training_output_slow);
-      res.training_errors_slow(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
     else
       res.training_errors(num_evals_complete) = NaN;
-      res.training_errors_slow(num_evals_complete) = NaN;
     end
     
     % Test error 
     current_test_output = ltmlp_ff(net, test_input);
-    current_test_output_slow = ltmlp_ff_slow(net, test_input, W_slow, bias_slow);
     if strcmp(opt.task,'regression') || strcmp(opt.task,'autoencoder')
       res.test_errors(num_evals_complete) = mean(sum((current_test_output-test_output).^2,1),2);
-      res.test_errors_slow(num_evals_complete) = mean(sum((current_test_output_slow-test_output).^2,1),2);
     elseif strcmp(opt.task,'classification')
       [~,maxI1]=max(current_test_output);
       [~,maxI2]=max(test_output);
       res.test_errors(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
-      [~,maxI1]=max(current_test_output_slow);
-      res.test_errors_slow(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
     else
       res.test_errors(num_evals_complete) = NaN;
-      res.test_errors_slow(num_evals_complete) = NaN;
     end
     if opt.momentum > 0
-      res.gradW(num_evals_complete) = sum(w2vec(directionW).^2);
+      res.gradW(num_evals_complete) = sum(ltmlp_params2vector(directionW, net.num_params).^2);
     else
-      res.gradW(num_evals_complete) = sum(w2vec(gradW).^2);
+      res.gradW(num_evals_complete) = sum(ltmlp_params2vector(gradWm, net.num_params).^2);
     end
 
     if opt.verbose
-      fprintf('Iteration %4d: training error = %.4f (%.4f), test error = %.4f (%.4f), cputime = %d, grad = %.4f\n', ...
-        iter, res.training_errors(num_evals_complete), res.training_errors_slow(num_evals_complete), ...
-        res.test_errors(num_evals_complete), res.test_errors_slow(num_evals_complete), ...
+      fprintf('Iteration %4d: training error = %.4f, test error = %.4f, cputime = %d, grad = %.4f\n', ...
+        iter, res.training_errors(num_evals_complete), res.test_errors(num_evals_complete), ...
         floor(cputime-cpustart), res.gradW(num_evals_complete));
     end
     
@@ -383,48 +334,37 @@ res.cputimes(num_evals_complete) = cputime-cpustart;
 
 % Training error
 current_training_output = ltmlp_ff(net, input);
-current_training_output_slow = ltmlp_ff_slow(net, input, W_slow, bias_slow);
 
 if strcmp(opt.task,'regression') || strcmp(opt.task,'autoencoder')
   res.training_errors(num_evals_complete) = mean(sum((current_training_output-output).^2,1),2);
-  res.training_errors_slow(num_evals_complete) = mean(sum((current_training_output_slow-output).^2,1),2);
 elseif strcmp(opt.task,'classification')
   [~,maxI1] = max(current_training_output);
   [~,maxI2] = max(output);
   res.training_errors(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
-  [~,maxI1] = max(current_training_output_slow);
-  res.training_errors_slow(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
 else
   res.training_errors(num_evals_complete) = NaN;
-  res.training_errors_slow(num_evals_complete) = NaN;
 end
 
 % Test error 
 current_test_output = ltmlp_ff(net, test_input);
-current_test_output_slow = ltmlp_ff_slow(net, test_input, W_slow, bias_slow);
 if strcmp(opt.task,'regression') || strcmp(opt.task,'autoencoder')
   res.test_errors(num_evals_complete) = mean(sum((current_test_output-test_output).^2,1),2);
-  res.test_errors_slow(num_evals_complete) = mean(sum((current_test_output_slow-test_output).^2,1),2);
 elseif strcmp(opt.task,'classification')
   [~,maxI1]=max(current_test_output);
   [~,maxI2]=max(test_output);
   res.test_errors(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
-  [~,maxI1]=max(current_test_output_slow);
-  res.test_errors_slow(num_evals_complete) = 100 - 100*sum(maxI1==maxI2)/length(maxI1);
 else
   res.test_errors(num_evals_complete) = NaN;
-  res.test_errors_slow(num_evals_complete) = NaN;
 end
 if opt.momentum > 0
-  res.gradW(num_evals_complete) = sum(w2vec(directionW).^2);
+  res.gradW(num_evals_complete) = sum(ltmlp_params2vector(directionW, net.num_params).^2);
 else
-  res.gradW(num_evals_complete) = sum(w2vec(gradW).^2);
+  res.gradW(num_evals_complete) = sum(ltmlp_params2vector(gradW, net.num_params).^2);
 end
 
 if opt.verbose
-  fprintf('Training done : training error = %.4f (%.4f), test error = %.4f (%.4f), cputime = %d, grad = %.4f\n', ...
-    res.training_errors(num_evals_complete), res.training_errors_slow(num_evals_complete), ...
-    res.test_errors(num_evals_complete), res.test_errors_slow(num_evals_complete), ...
+  fprintf('Training done : training error = %.4f, test error = %.4f, cputime = %d, grad = %.4f\n', ...
+    res.training_errors(num_evals_complete), res.test_errors(num_evals_complete), ...
     floor(cputime-cpustart), res.gradW(num_evals_complete));
 end
 
