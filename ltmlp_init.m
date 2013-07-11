@@ -63,17 +63,7 @@ net.nonlintrans = cell(1,nlayers);
 for l=2:nlayers
   if numel(opt.fixed_transf) > 1
     net.nonlintrans{l} = repmat(opt.fixed_transf, [layers(l) 1]);
-  else % this equals fixedtransf [1 0 1] (= no transformations)
-    net.nonlintrans{l} = [ones(layers(l), 1) zeros(layers(l), 1) ones(layers(l), 1)];
-  end
-end
-
-if opt.num_transf > 0 && numel(opt.fixed_transf) == 1
-  if opt.verbose
-    fprintf('Computing transformations to initialize shortcuts...');
-  end
-  net = ltmlp_transform(net, input);
-  if opt.verbose
-    fprintf('done.\n');
+  else % this equals fixedtransf [0 0 1] (= no transformations)
+    net.nonlintrans{l} = [zeros(layers(l), 2) ones(layers(l), 1)];
   end
 end

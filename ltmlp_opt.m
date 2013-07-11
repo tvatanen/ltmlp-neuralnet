@@ -16,14 +16,17 @@ else % otherwise use defaults
   opt.num_transf = 2;              % number of transformations
                                    % (alpha/beta/gamma)
   opt.bias_init_scale = 0.5;       %
+  opt.ratedecay = 0.9;             % learning rate decay term
   opt.momentum = 0.9;              % momentum for the gradient
+  opt.mominit = 0.5;               % initial momentum
+  opt.burnin = 50;                 % burn-in time (epochs, momentum increases)
   opt.minibatchsize = 1000;        % mini-batch size
   opt.weight_decay = 0;            % weight decay term, lambda
-  opt.transf_every_n_iters = 100;  % how often to update transf params
+  opt.transf_every_n_iters = 1;    % how often to update transformations
   opt.n_error_evals = 100;         % how many times to evaluate error(s)
-  opt.stepsize = 1.0;              % stepsize in the beginning 
-  opt.runtime = 60000;             % runtime in seconds
-  opt.input_noise = 0.0;           % add noise to input data
+  opt.stepsize = 1.0;              % learning rate in the beginning 
+  opt.runtime = 60000;             % runtime in epochs
+  opt.input_noise = 0.0;           % add noise to input activations
   opt.gammatype = 1;               % determines how gamma is computed
   opt.verbose = 1;                 % level of verbosity
                                    %   (0) no output
@@ -53,13 +56,9 @@ while i<=length(varargin),
       case 'batchsize', i=i+1; opt.minibatchsize = varargin{i};
       case 'gammatype', i=i+1; opt.gammatype = varargin{i};
       case 'momentum', i=i+1; opt.momentum = varargin{i};
-      % unambiguous values
-     case {'hexa','rect'}, sTopol.lattice = varargin{i};
-     otherwise; argok=0; 
-    end
-  elseif isstruct(varargin{i}) && isfield(varargin{i},'type'), 
-    switch varargin{i}(1).type, 
-     case 'som_topol', sTopol = varargin{i}; 
+      case 'mominit', i=i+1; opt.mominit = varargin{i};        
+      case 'burnin', i=i+1; opt.burnin = varargin{i};
+      case 'ratedecay', i=i+1; opt.ratedecay = varargin{i};
      otherwise; argok=0; 
     end
   else
